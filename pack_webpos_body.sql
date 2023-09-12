@@ -175,7 +175,8 @@ as
         if l_blob is not null then
             update sharedtickets
             set content = l_blob
-                ,lockby = null
+                , lockby = 'server'
+                , state = p_place_state
             where id = p_place_id
                 and lockby = p_lockby;
         else
