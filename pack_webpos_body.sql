@@ -14,21 +14,23 @@ as
         l_lockcnt number;
         l_errm VARCHAR2(32000);
         l_place_name varchar2(1024);
+        l_id varchar2(256);
     begin
         BEGIN
             BEGIN
+                l_id := to_char(systimestamp, 'yyyymmddhh24missff')||'-'||SYS_GUID();
+            
                 select name into l_place_name from places where id = p_place_id;
                 insert into sharedtickets (id, name, content, lockby)
                 values (
                     p_place_id
                     , l_place_name
-                    , utl_raw.cast_to_raw('{"m_sId":"'||SYS_GUID()||'","tickettype":0,"m_iTicketId":0,"m_dDate":"'||to_char(sysdate,'dd.mm.yyyy hh24:mi:ss')||'","attributes":{},"m_aLines":[],"m_aLinesSorted":[],"payments":[],"m_info":"'||l_place_name||'"}')
+                    , utl_raw.cast_to_raw('{"m_sId":"'||l_id||'","tickettype":0,"m_iTicketId":0,"m_dDate":"'||to_char(sysdate,'dd.mm.yyyy hh24:mi:ss')||'","attributes":{},"m_aLines":[],"m_aLinesSorted":[],"payments":[],"m_info":"'||l_place_name||'"}')
                     , p_lockby
                 );
             EXCEPTION WHEN OTHERS THEN
                 NULL;
             END;
-            
             
             -- lock place
             update sharedtickets
@@ -67,12 +69,21 @@ as
                         l_start := l_start + l_buffer;
                     END LOOP;
                     
+                    -- check json content
+                    begin
+                        apex_json.parse(l_clob, true);
+                    EXCEPTION
+                        WHEN OTHERS THEN
+                            raise_application_error(-20000,'Ungültiges Tisch Format!');
+                    end;
+                    
+                    
                     return l_clob;
                 END IF;
             else
             
                 DBMS_LOB.CREATETEMPORARY(l_clob, TRUE);
-                select '{"error": true, "errmsg":"Tisch ist bereits geÃ¶ffnet von '||lockby||'"}'
+                select '{"error": true, "errmsg":"Tisch ist bereits geöffnet von '||lockby||'"}'
                 into l_varchar
                 FROM sharedtickets
                 where 1=1
@@ -91,6 +102,12 @@ as
                 FROM dual;
                     
                 DBMS_LOB.WRITEAPPEND(l_clob, LENGTH(l_varchar), l_varchar);
+                
+                update sharedtickets
+                set lockby = null
+                where id = p_place_id
+                    and lockby = p_lockby;
+                
                 return l_clob;
         END;
         
@@ -180,7 +197,7 @@ as
             where id = p_place_id
                 and lockby = p_lockby;
         else
-            raise_application_error(-20000,'Keine Daten Ã¼bermittelt!');
+            raise_application_error(-20000,'Keine Daten übermittelt!');
         end if;
     end;
 
